@@ -5,7 +5,7 @@ import re
 import random
 from collections import Counter
 
-# Bulut Bağlantısı - Secrets üzerinden
+# Bulut Bağlantısı
 TOKEN = st.secrets["GITHUB_TOKEN"]
 REPO = st.secrets["REPO_NAME"]
 
@@ -15,7 +15,7 @@ def veri_sakla(oyun_adi, metin):
     r = requests.get(url, headers=headers)
     sha = r.json()['sha'] if r.status_code == 200 else None
     content_encoded = base64.b64encode(metin.encode('utf-8')).decode('utf-8')
-    data = {"message": f"Hafiza Guncelleme: {oyun_adi}", "content": content_encoded}
+    data = {"message": f"Guncelleme: {oyun_adi}", "content": content_encoded}
     if sha: data["sha"] = sha
     res = requests.put(url, json=data, headers=headers)
     return res.status_code in [200, 201]
@@ -28,8 +28,8 @@ def veri_getir(oyun_adi):
         return base64.b64decode(r.json()['content']).decode('utf-8')
     return ""
 
-st.set_page_config(page_title="Loto AI Hyper 2M", layout="wide")
-st.title("⚡ Loto AI Hyper - 2.000.000 Analiz Gücü")
+st.set_page_config(page_title="Loto AI Hyper V3", layout="wide")
+st.title("🛡️ Loto AI Master - Akıllı Analiz Sistemi")
 
 oyun_ayarlar = {
     "Çılgın Sayısal": {"dosya": "CilginSayisal", "max": 90, "adet": 6, "ek": "Süper Star", "ek_max": 90},
@@ -46,43 +46,34 @@ for i, tab in enumerate(tabs):
     h_key = f"h_{ayar['dosya']}"
     
     with tab:
-        # Otomatik Veri Çekme
+        # OTOMATİK HAFIZA YÜKLEME (Uygulama açıldığında verileri çeker)
         if h_key not in st.session_state or st.session_state[h_key] == "":
-            st.session_state[h_key] = veri_getir(ayar['dosya'])
+            with st.spinner(f"{isim} hafızası yükleniyor..."):
+                st.session_state[h_key] = veri_getir(ayar['dosya'])
 
         col1, col2 = st.columns([1, 2])
         
         with col1:
-            st.header("📥 Veri İşlemleri")
+            st.header("📥 Veri Girişi")
             mevcut = st.session_state[h_key]
             tum_sayilar = re.findall(r'\d+', mevcut)
-            st.metric(f"📊 {isim} Kayıtlı Sayı", len(tum_sayilar))
+            st.metric("📊 Hafızadaki Sayı", len(tum_sayilar))
             
-            # Tekli Manuel Giriş
-            with st.expander("🆕 Son Çekiliş Sonucunu Gir", expanded=True):
-                son_sonuc = st.text_input("Tarih ve Sayılar", key=f"input_tek_{ayar['dosya']}")
-                if st.button("💾 KAYDET VE TEMİZLE", key=f"btn_tek_{ayar['dosya']}"):
-                    if son_sonuc:
-                        st.session_state[h_key] += "\n" + son_sonuc
-                        if veri_sakla(ayar['dosya'], st.session_state[h_key]):
-                            st.success("Buluta Kaydedildi!")
-                            st.rerun()
-
-            # Toplu Veri Yükleme
-            with st.expander("📚 Toplu Veri Yükle"):
-                toplu = st.text_area("Geçmiş yılları buraya yapıştır", height=150, key=f"area_toplu_{ayar['dosya']}")
-                if st.button("💾 BULUTA GÖNDER", key=f"btn_bulut_{ayar['dosya']}"):
-                    if toplu:
-                        st.session_state[h_key] += "\n" + toplu
-                        veri_sakla(ayar['dosya'], st.session_state[h_key])
-                        st.success("Tüm veriler GitHub'da!")
+            # Form kullanarak otomatik temizleme sağlıyoruz
+            with st.form(key=f"form_{ayar['dosya']}", clear_on_submit=True):
+                yeni_veri = st.text_area("Sonuçları buraya yapıştır", height=150)
+                submit = st.form_submit_button("💾 BULUTA KAYDET VE TEMİZLE")
+                if submit and yeni_veri:
+                    st.session_state[h_key] += "\n" + yeni_veri
+                    if veri_sakla(ayar['dosya'], st.session_state[h_key]):
+                        st.success("Veriler Buluta Mühürlendi!")
                         st.rerun()
 
         with col2:
-            st.header("🧬 2.000.000 Analiz Motoru")
-            if st.button(f"🚀 HİPER ANALİZİ BAŞLAT", key=f"btn_analiz_{ayar['dosya']}", use_container_width=True):
+            st.header("🧬 Akıllı Analiz (2 Milyon)")
+            if st.button(f"🚀 ANALİZİ BAŞLAT", key=f"anlz_{ayar['dosya']}", use_container_width=True):
                 if len(tum_sayilar) < 10:
-                    st.warning("Hafıza boş kanka, veri yükle!")
+                    st.warning("Önce veri yükle kanka!")
                 else:
                     with st.status("🛸 2 Milyon Kombinasyon Taranıyor...", expanded=True):
                         frekans = Counter(tum_sayilar)
@@ -93,11 +84,17 @@ for i, tab in enumerate(tabs):
                             puan = sum(frekans.get(str(n), 0) for n in kolon)
                             adaylar.append((kolon, puan))
                         
+                        # BENZERLİK VE ARDIŞIKLIK FİLTRESİ
                         adaylar.sort(key=lambda x: x[1], reverse=True)
-                        en_iyi_on = adaylar[:10]
+                        en_iyi_on = []
+                        for kolon, puan in adaylar:
+                            if len(en_iyi_on) >= 10: break
+                            # Eğer bu kolon, zaten seçilenlerle %70'den fazla aynıysa geç (Benzerliği engelle)
+                            if not any(len(set(kolon) & set(mevcut_k[0])) > (ayar['adet'] * 0.7) for mevcut_k in en_iyi_on):
+                                en_iyi_on.append((kolon, puan))
 
-                    st.subheader("📍 En Güçlü 10 Stratejik Kolon")
+                    st.subheader("📍 Stratejik Farklı 10 Kolon")
                     for k, (kolon, puan) in enumerate(en_iyi_on, 1):
                         k_str = " - ".join([f"{n:02d}" for n in kolon])
-                        st.info(f"**Kolon {k}:** {k_str} (Skor: {puan})")
+                        st.success(f"**Kolon {k}:** {k_str} (Skor: {puan})")
                     st.balloons()
