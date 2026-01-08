@@ -3,74 +3,67 @@ import pandas as pd
 import numpy as np
 import re
 
-st.set_page_config(page_title="Loto AI Master Pro", layout="wide")
+st.set_page_config(page_title="Loto AI Pro", layout="wide")
 st.title("🎰 Loto AI Master - 6+1 Profesyonel Sistem")
 
-# 4 Oyun Sekmesi
 tabs = st.tabs(["🔵 Sayısal Loto", "🔴 Süper Loto", "🟢 On Numara", "🟡 Şans Topu"])
 
-def veri_temizle(metin, tavan):
-    # Satır satır oku, tarih ve kısa numaraları (hafta no gibi) ele
-    temiz_sayilar = []
+def veri_ayikla(metin, tavan):
+    # Joker ve tarihleri eleyip sadece kolon sayılarını bulur
+    sayilar = []
     satirlar = metin.split('\n')
     for satir in satirlar:
-        # Sadece 1-2 haneli sayıları bul (Tarihleri/Yılları eler)
-        adaylar = re.findall(r'\b(?:[1-9]|[1-8][0-9]|90)\b', satir)
-        if len(adaylar) >= 6: # Bir loto kolonu en az 6 sayı olmalı
-            temiz_sayilar.extend([int(s) for s in adaylar])
-    return temiz_sayilar
+        # 1-90 arası sayıları bul (Tarih ve hafta no elenir)
+        bulunanlar = re.findall(r'\b(?:[1-9]|[1-8][0-9]|90)\b', satir)
+        # Sadece kolon verisi olabilecek satırları al (6-10 arası sayı içerenler)
+        if 6 <= len(bulunanlar) <= 12:
+            sayilar.extend([int(s) for s in bulunanlar[:6]]) # Sadece ilk 6 ana sayıyı al
+    return sayilar
 
-def analiz_motoru(hafiza, adet, tavan):
-    sayilar = veri_temizle(hafiza, tavan)
-    if len(sayilar) < adet * 2: return None
-    
-    frekans = pd.Series(sayilar).value_counts()
-    populer = frekans.index.tolist()
-    
-    tahminler = []
-    for _ in range(10):
-        # 6 Ana Sayı Seçimi
-        havuz = populer[:20] * 5 + list(range(1, tavan + 1))
-        ana_kolon = sorted(np.random.choice(havuz, adet, replace=False))
-        # 1 SüperStar Seçimi (1-90 arası bağımsız şans)
-        super_star = np.random.randint(1, tavan + 1)
-        tahminler.append((ana_kolon, super_star))
-    return tahminler
-
-def oyun_arayuzu(oyun_adi, adet, tavan, sekme):
+def oyun_paneli(oyun, adet, tavan, sekme):
     with sekme:
-        st.header(f"{oyun_adi} Paneli")
-        if f"depo_{oyun_adi}" not in st.session_state:
-            st.session_state[f"depo_{oyun_adi}"] = ""
+        if f"havuz_{oyun}" not in st.session_state:
+            st.session_state[f"havuz_{oyun}"] = ""
 
         col1, col2 = st.columns(2)
         with col1:
-            giriş = st.text_area(f"Verileri Yapıştır", height=150, key=f"in_{oyun_adi}", help="Tarihli liste yapıştırabilirsiniz, robot ayıklayacaktır.")
-            if st.button(f"💾 Hafızaya Kaydet ve Temizle", key=f"sv_{oyun_adi}"):
+            # Kutuyu boşaltmak için session_state bağlantısı kuruldu
+            if f"kutu_{oyun}" not in st.session_state:
+                st.session_state[f"kutu_{oyun}"] = ""
+                
+            giriş = st.text_area("Verileri Buraya Yapıştır", height=150, key=f"text_{oyun}", value=st.session_state[f"kutu_{oyun}"])
+            
+            if st.button(f"💾 Hafızaya Kaydet ve Kutuyu Temizle", key=f"btn_sv_{oyun}"):
                 if giriş:
-                    st.session_state[f"depo_{oyun_adi}"] += "\n" + giriş
-                    st.success("✅ Veriler ayıklandı ve hafızaya eklendi!")
-                    st.rerun()
+                    # Veriyi depoya ekle
+                    st.session_state[f"havuz_{oyun}"] += "\n" + giriş
+                    # Kutuyu boşaltmak için state'i sıfırla
+                    st.session_state[f"kutu_{oyun}"] = "" 
+                    st.success("✅ Veriler hafızaya eklendi!")
+                    st.rerun() # Sayfayı yenileyerek kutuyu boş gösterir
 
         with col2:
-            mevcut = st.session_state[f"depo_{oyun_adi}"]
-            ayiklanmis = veri_temizle(mevcut, tavan)
-            st.info(f"📊 Hafızadaki Net Analiz Verisi: {len(ayiklanmis)} sayı")
-            if st.button(f"🗑️ Hafızayı Sıfırla", key=f"clr_{oyun_adi}"):
-                st.session_state[f"depo_{oyun_adi}"] = ""
+            ayiklanan = veri_ayikla(st.session_state[f"havuz_{oyun}"], tavan)
+            st.info(f"📊 Hafızadaki Net Analiz Verisi: {len(ayiklanan)} sayı")
+            st.warning("⚠️ 'Hafızayı Sıfırla' butonu tüm geçmişi siler!")
+            if st.button(f"🗑️ {oyun} Tüm Hafızasını Sıfırla", key=f"btn_clr_{oyun}"):
+                st.session_state[f"havuz_{oyun}"] = ""
                 st.rerun()
 
-        if st.button(f"🚀 10 Kolon Tahmini Üret (6+1)", key=f"pre_{oyun_adi}"):
-            tahminler = analiz_motoru(st.session_state[f"depo_{oyun_adi}"], adet, tavan)
-            if not tahminler:
-                st.error("Hafızada yeterli kolon verisi bulunamadı!")
+        if st.button(f"🚀 10 Kolon Tahmini Üret (6+1)", key=f"btn_pre_{oyun}"):
+            datalar = veri_ayikla(st.session_state[f"havuz_{oyun}"], tavan)
+            if len(datalar) < adet:
+                st.error("Hafıza yetersiz! Lütfen geçmiş verileri ekleyin.")
             else:
                 st.success("🤖 AI Tahminleri (Ana Sayılar + SüperStar):")
-                for i, (ana, ss) in enumerate(tahminler, 1):
-                    st.markdown(f"**Kolon {i}:** `{' - '.join(map(str, ana))}`  |  🌟 **SüperStar:** `{ss}`")
+                frekans = pd.Series(datalar).value_counts()
+                populer = frekans.index.tolist()
+                for i in range(1, 11):
+                    ana = sorted(np.random.choice(populer[:20] * 3 + list(range(1, tavan+1)), adet, replace=False))
+                    ss = np.random.randint(1, tavan + 1)
+                    st.markdown(f"**Kolon {i}:** `{' - '.join(map(str, ana))}` | 🌟 **SüperStar:** `{ss}`")
 
-# Oyunları Başlat
-oyun_arayuzu("Sayısal Loto", 6, 90, tabs[0])
-oyun_arayuzu("Süper Loto", 6, 60, tabs[1])
-oyun_arayuzu("On Numara", 10, 80, tabs[2])
-oyun_arayuzu("Şans Topu", 5, 34, tabs[3])
+oyun_paneli("Sayısal Loto", 6, 90, tabs[0])
+oyun_paneli("Süper Loto", 6, 60, tabs[1])
+oyun_paneli("On Numara", 10, 80, tabs[2])
+oyun_paneli("Şans Topu", 5, 34, tabs[3])
