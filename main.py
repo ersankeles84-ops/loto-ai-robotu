@@ -5,27 +5,31 @@ import requests
 from bs4 import BeautifulSoup
 import re
 
-# Sayfa Ayarları
 st.set_page_config(page_title="Loto AI Master Pro", layout="wide")
 st.title("🎰 Loto AI Master - Tam Otomatik Panel")
 
-# Oyun Ayarları (İsimler Güncellendi)
+# Oyun Ayarları ve Veri Kaynakları
 oyunlar = {
-    "Çılgın Sayısal": {"adet": 6, "tavan": 90, "url": "https://lotobil.com/sayisal-loto-sonuclari"},
-    "Süper Loto": {"adet": 6, "tavan": 60, "url": "https://lotobil.com/super-loto-sonuclari"},
-    "On Numara": {"adet": 10, "tavan": 80, "url": "https://lotobil.com/on-numara-sonuclari"},
-    "Şans Topu": {"adet": 5, "tavan": 34, "url": "https://lotobil.com/sans-topu-sonuclari"}
+    "Çılgın Sayısal": {"adet": 6, "tavan": 90, "url": "https://www.lototurkiye.com/sayisal-loto-sonuclari"},
+    "Süper Loto": {"adet": 6, "tavan": 60, "url": "https://www.lototurkiye.com/super-loto-sonuclari"},
+    "On Numara": {"adet": 10, "tavan": 80, "url": "https://www.lototurkiye.com/on-numara-sonuclari"},
+    "Şans Topu": {"adet": 5, "tavan": 34, "url": "https://www.lototurkiye.com/sans-topu-sonuclari"}
 }
 
-def veri_cek_ve_temizle(url, tavan):
+def veri_cek_motoru(url, tavan):
     try:
-        header = {"User-Agent": "Mozilla/5.0"}
-        sayfa = requests.get(url, headers=header, timeout=10)
-        soup = BeautifulSoup(sayfa.content, "html.parser")
-        metin = soup.get_text()
-        # Sadece loto sayılarını (1-tavan arası) ayıkla
-        bulunanlar = re.findall(r'\b(?:[1-9]|[1-8][0-9]|90)\b', metin)
-        return [int(s) for s in bulunanlar if int(s) <= tavan]
+        # Gerçek bir kullanıcı gibi davran (Engel aşmak için)
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+        response = requests.get(url, headers=headers, timeout=15)
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, 'html.parser')
+            # Sayfadaki tüm metni al ve sayıları cımbızla çek
+            ham_metin = soup.get_text()
+            temiz_sayilar = re.findall(r'\b(?:[1-9]|[1-8][0-9]|90)\b', ham_metin)
+            sayilar = [int(s) for s in temiz_sayilar if int(s) <= tavan]
+            # Sadece son 500 sayıyı al (Performans için)
+            return sayilar[-500:] if len(sayilar) > 500 else sayilar
+        return []
     except:
         return []
 
@@ -39,41 +43,38 @@ for i, (ad, ayar) in enumerate(oyunlar.items()):
         
         # OTOMATİK DÜĞME
         if st.button(f"🔄 İnternetten {ad} Sonuçlarını Otomatik Çek", key=f"btn_{ad}"):
-            with st.spinner("Güncel sonuçlar taranıyor..."):
-                veriler = veri_cek_ve_temizle(ayar["url"], ayar["tavan"])
-                if veriler:
-                    st.session_state[f"hafiza_{ad}"] = veriler
-                    st.success(f"✅ Başarılı! {len(veriler)} adet sayı hafızaya alındı.")
+            with st.spinner("Sistem interneti tarıyor..."):
+                cekilenler = veri_cek_motoru(ayar["url"], ayar["tavan"])
+                if len(cekilenler) > 10:
+                    st.session_state[f"hafiza_{ad}"] = cekilenler
+                    st.success(f"✅ Başarılı! {len(cekilenler)} adet güncel sayı hafızaya alındı.")
                 else:
-                    st.error("Veri çekilemedi. Lütfen manuel eklemeyi deneyin.")
+                    st.warning("⚠️ Otomatik çekme şu an kısıtlı. Lütfen aşağıdan manuel veri ekleyin.")
 
-        # Durum Göstergesi
-        mevcut_veri = st.session_state[f"hafiza_{ad}"]
-        st.info(f"🧠 Hafıza Durumu: {len(mevcut_veri)} Sayı")
+        # Durum
+        mevcut = st.session_state[f"hafiza_{ad}"]
+        st.info(f"🧠 Hafıza Durumu: {len(mevcut)} Sayı")
 
-        # TAHMİN ALANI
+        # TAHMİN
         if st.button(f"🚀 {ad} İçin 10 Kolon Analiz Et", key=f"run_{ad}"):
-            if len(mevcut_veri) < ayar["adet"]:
-                st.error("Hafıza boş! Lütfen önce sonuçları çekin.")
+            if len(mevcut) < ayar["adet"]:
+                st.error("Hafıza yetersiz! Lütfen veri yükleyin.")
             else:
-                st.subheader("🤖 AI Profesyonel Tahminleri")
-                frekans = pd.Series(mevcut_veri).value_counts()
-                populer = frekans.index.tolist()
+                st.subheader("🤖 AI Tahminleri (Çok Çıkan Odaklı)")
+                seri = pd.Series(mevcut).value_counts()
+                populer = seri.index.tolist()
                 
                 for k in range(1, 11):
-                    # Zeki Algoritma: Çok çıkanlar ve şanslı sayılar karışımı
-                    havuz = populer[:15] * 5 + list(range(1, ayar["tavan"] + 1))
+                    # Akıllı Havuz: En çok çıkan 20 sayıyı havuzda 5 kat daha fazla bulundurur
+                    havuz = populer[:20] * 5 + list(range(1, ayar["tavan"] + 1))
                     kolon = sorted(np.random.choice(havuz, ayar["adet"], replace=False))
                     joker = np.random.randint(1, ayar["tavan"] + 1)
                     st.code(f"Kolon {k}: {' - '.join(map(str, kolon))} | JOKER: {joker}")
 
-        # MANUEL EKLEME (YEDEK PLANI)
-        with st.expander("Manuel Veri Girişi / Hafızayı Sıfırla"):
-            ek_metin = st.text_area("Kopyaladığın sayıları buraya yapıştır", key=f"area_{ad}")
+        # MANUEL EKLEME
+        with st.expander("📝 Manuel Veri Girişi (Eğer internet çekmezse)"):
+            metin = st.text_area("Sonuçları buraya yapıştır", key=f"txt_{ad}", help="Tarihleri silmenize gerek yok, robot sadece sayıları alır.")
             if st.button("Hafızaya Ekle", key=f"save_{ad}"):
-                yeni_sayilar = [int(s) for s in re.findall(r'\b\d+\b', ek_metin) if int(s) <= ayar["tavan"]]
-                st.session_state[f"hafiza_{ad}"].extend(yeni_sayilar)
-                st.rerun()
-            if st.button("Hafızayı Temizle", key=f"clr_{ad}"):
-                st.session_state[f"hafiza_{ad}"] = []
+                yeni = [int(s) for s in re.findall(r'\b\d+\b', metin) if int(s) <= ayar["tavan"]]
+                st.session_state[f"hafiza_{ad}"].extend(yeni)
                 st.rerun()
