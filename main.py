@@ -4,7 +4,7 @@ import base64
 import re
 import random
 
-# Bulut Bağlantısı
+# Bulut Ayarları
 TOKEN = st.secrets["GITHUB_TOKEN"]
 REPO = st.secrets["REPO_NAME"]
 
@@ -21,17 +21,19 @@ def veri_sakla(oyun_adi, metin):
 def veri_getir(oyun_adi):
     url = f"https://api.github.com/repos/{REPO}/contents/{oyun_adi}.txt"
     r = requests.get(url, headers={"Authorization": f"token {TOKEN}"})
-    return base64.b64decode(r.json()['content']).decode() if r.status_code == 200 else ""
+    if r.status_code == 200:
+        return base64.b64decode(r.json()['content']).decode()
+    return ""
 
-st.set_page_config(page_title="Loto AI Pro Max", layout="wide")
-st.title("🎰 Loto AI Master - Süper Star Destekli")
+st.set_page_config(page_title="Loto AI Master", layout="wide")
+st.title("🎰 Loto AI Master - Profesyonel Panel")
 
 tab_isimleri = ["Çılgın Sayısal", "Süper Loto", "On Numara", "Şans Topu"]
 oyun_ayarlar = {
-    "Çılgın Sayısal": {"dosya": "CilginSayisal", "max": 90, "adet": 6, "star": 90},
-    "Süper Loto": {"dosya": "SuperLoto", "max": 60, "adet": 6, "star": 0},
-    "On Numara": {"dosya": "OnNumara", "max": 80, "adet": 22, "star": 0},
-    "Şans Topu": {"dosya": "SansTopu", "max": 34, "adet": 5, "star": 14}
+    "Çılgın Sayısal": {"dosya": "CilginSayisal", "max": 90, "adet": 6, "ek": "Süper Star", "ek_max": 90},
+    "Süper Loto": {"dosya": "SuperLoto", "max": 60, "adet": 6, "ek": None, "ek_max": 0},
+    "On Numara": {"dosya": "OnNumara", "max": 80, "adet": 22, "ek": None, "ek_max": 0},
+    "Şans Topu": {"dosya": "SansTopu", "max": 34, "adet": 5, "ek": "Artı", "ek_max": 14}
 }
 
 tabs = st.tabs(tab_isimleri)
@@ -48,37 +50,36 @@ for i, tab in enumerate(tabs):
             if f"h_{ayar['dosya']}" not in st.session_state:
                 st.session_state[f"h_{ayar['dosya']}"] = veri_getir(ayar['dosya'])
             
-            mevcut_veriler = st.session_state[f"h_{ayar['dosya']}"]
-            sayilar = re.findall(r'\d+', mevcut_veriler)
-            st.metric("🧠 Kayıtlı Sayı Adedi", len(sayilar))
+            mevcut = st.session_state[f"h_{ayar['dosya']}"]
+            kayitli_sayilar = re.findall(r'\d+', mevcut)
+            st.metric("🧠 Kayıtlı Sayı Adedi", len(kayitli_sayilar))
             
-            # Veri girince silinmesi için key kullanıyoruz
-            yeni_giris = st.text_area("Verileri Yapıştır", height=150, key=f"input_{ayar['dosya']}")
-            
-            if st.button(f"💾 {isim} KAYDET VE TEMİZLE", use_container_width=True):
-                if yeni_giris:
-                    st.session_state[f"h_{ayar['dosya']}"] += "\n" + yeni_giris
+            # Form kullanarak hatayı ve kutu temizleme sorununu kökten çözüyoruz
+            with st.form(key=f"form_{ayar['dosya']}", clear_on_submit=True):
+                yeni_veri = st.text_area("Verileri Buraya Yapıştır", height=200)
+                submit = st.form_submit_button(f"💾 {isim} KAYDET VE TEMİZLE", use_container_width=True)
+                
+                if submit and yeni_veri:
+                    st.session_state[f"h_{ayar['dosya']}"] += "\n" + yeni_veri
                     veri_sakla(ayar['dosya'], st.session_state[f"h_{ayar['dosya']}"])
-                    st.success("Buluta İşlendi! Ekran Temizleniyor...")
-                    # Session state'i temizleyip sayfayı yenileyerek kutuyu boşaltıyoruz
-                    st.session_state[f"input_{ayar['dosya']}"] = ""
+                    st.success("Buluta Kaydedildi ve Ekran Temizlendi!")
                     st.rerun()
 
         with col2:
-            st.header("🔮 10 Kolon + Süper Star")
-            if st.button(f"🚀 {isim} TAHMİN ÜRET", use_container_width=True):
-                if len(sayilar) < 10:
-                    st.error("Tahmin için biraz veri girmelisin kanka!")
-                else:
-                    for k in range(1, 11):
-                        # Ana Sayılar
-                        tahmin = sorted(random.sample(range(1, ayar['max'] + 1), ayar['adet']))
-                        tahmin_str = " - ".join([f"{n:02d}" for n in tahmin])
-                        
-                        # Süper Star / Artı Sayı Bölümü
-                        if ayar['star'] > 0:
-                            star_no = random.randint(1, ayar['star'])
-                            st.markdown(f"**Kolon {k}:** `{tahmin_str}` | 🔥 **Star: {star_no:02d}**")
-                        else:
-                            st.markdown(f"**Kolon {k}:** `{tahmin_str}`")
-                    st.balloons()
+            st.header(f"🔮 10 Kolon Tahmin")
+            if st.button(f"🚀 {isim} İÇİN TAHMİN ÜRET", use_container_width=True, key=f"btn_{ayar['dosya']}"):
+                if len(kayitli_sayilar) < 10:
+                    st.warning("Hafızada yeterli veri yok, rastgele üretiliyor...")
+                
+                st.write("---")
+                for k in range(1, 11):
+                    tahmin = sorted(random.sample(range(1, ayar['max'] + 1), ayar['adet']))
+                    tahmin_str = " - ".join([f"{n:02d}" for n in tahmin])
+                    
+                    if ayar['ek']:
+                        ek_no = random.randint(1, ayar['ek_max'])
+                        st.markdown(f"**Kolon {k}:** `{tahmin_str}` | 🔥 **{ayar['ek']}: {ek_no:02d}**")
+                    else:
+                        st.markdown(f"**Kolon {k}:** `{tahmin_str}`")
+                st.write("---")
+                st.balloons()
