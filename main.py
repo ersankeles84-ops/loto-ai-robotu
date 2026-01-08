@@ -23,15 +23,15 @@ def veri_getir(oyun_adi):
     r = requests.get(url, headers={"Authorization": f"token {TOKEN}"})
     return base64.b64decode(r.json()['content']).decode() if r.status_code == 200 else ""
 
-st.set_page_config(page_title="Loto AI Pro", layout="wide")
-st.title("🎰 Loto AI Master - Akıllı Analiz Paneli")
+st.set_page_config(page_title="Loto AI Pro Max", layout="wide")
+st.title("🎰 Loto AI Master - Süper Star Destekli")
 
 tab_isimleri = ["Çılgın Sayısal", "Süper Loto", "On Numara", "Şans Topu"]
 oyun_ayarlar = {
-    "Çılgın Sayısal": {"dosya": "CilginSayisal", "max": 90, "adet": 6},
-    "Süper Loto": {"dosya": "SuperLoto", "max": 60, "adet": 6},
-    "On Numara": {"dosya": "OnNumara", "max": 80, "adet": 22},
-    "Şans Topu": {"dosya": "SansTopu", "max": 34, "adet": 5}
+    "Çılgın Sayısal": {"dosya": "CilginSayisal", "max": 90, "adet": 6, "star": 90},
+    "Süper Loto": {"dosya": "SuperLoto", "max": 60, "adet": 6, "star": 0},
+    "On Numara": {"dosya": "OnNumara", "max": 80, "adet": 22, "star": 0},
+    "Şans Topu": {"dosya": "SansTopu", "max": 34, "adet": 5, "star": 14}
 }
 
 tabs = st.tabs(tab_isimleri)
@@ -50,28 +50,35 @@ for i, tab in enumerate(tabs):
             
             mevcut_veriler = st.session_state[f"h_{ayar['dosya']}"]
             sayilar = re.findall(r'\d+', mevcut_veriler)
-            st.metric("🧠 Hafızadaki Sayı Adedi", len(sayilar))
+            st.metric("🧠 Kayıtlı Sayı Adedi", len(sayilar))
             
-            yeni_giris = st.text_area("Sonuçları Buraya Karışık Yapıştır (Ayıraç Gerekmez)", height=150, key=f"in_{isim}")
+            # Veri girince silinmesi için key kullanıyoruz
+            yeni_giris = st.text_area("Verileri Yapıştır", height=150, key=f"input_{ayar['dosya']}")
             
-            if st.button(f"💾 {isim} HAFIZAYA EKLE", use_container_width=True):
+            if st.button(f"💾 {isim} KAYDET VE TEMİZLE", use_container_width=True):
                 if yeni_giris:
                     st.session_state[f"h_{ayar['dosya']}"] += "\n" + yeni_giris
                     veri_sakla(ayar['dosya'], st.session_state[f"h_{ayar['dosya']}"])
-                    st.success("Kaydedildi!")
+                    st.success("Buluta İşlendi! Ekran Temizleniyor...")
+                    # Session state'i temizleyip sayfayı yenileyerek kutuyu boşaltıyoruz
+                    st.session_state[f"input_{ayar['dosya']}"] = ""
                     st.rerun()
 
         with col2:
-            st.header("🔮 10 Kolon Özel Tahmin")
-            if st.button(f"🚀 {isim} İÇİN 10 KOLON ÜRET", use_container_width=True):
+            st.header("🔮 10 Kolon + Süper Star")
+            if st.button(f"🚀 {isim} TAHMİN ÜRET", use_container_width=True):
                 if len(sayilar) < 10:
                     st.error("Tahmin için biraz veri girmelisin kanka!")
                 else:
-                    st.write("---")
                     for k in range(1, 11):
-                        # Basit ama etkili bir ağırlıklı tahmin simülasyonu
+                        # Ana Sayılar
                         tahmin = sorted(random.sample(range(1, ayar['max'] + 1), ayar['adet']))
                         tahmin_str = " - ".join([f"{n:02d}" for n in tahmin])
-                        st.markdown(f"**Kolon {k}:** `{tahmin_str}`")
-                    st.write("---")
+                        
+                        # Süper Star / Artı Sayı Bölümü
+                        if ayar['star'] > 0:
+                            star_no = random.randint(1, ayar['star'])
+                            st.markdown(f"**Kolon {k}:** `{tahmin_str}` | 🔥 **Star: {star_no:02d}**")
+                        else:
+                            st.markdown(f"**Kolon {k}:** `{tahmin_str}`")
                     st.balloons()
