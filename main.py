@@ -5,7 +5,6 @@ import re
 import random
 from collections import Counter
 
-# Bulut Bağlantı Ayarları
 TOKEN = st.secrets["GITHUB_TOKEN"]
 REPO = st.secrets["REPO_NAME"]
 
@@ -15,7 +14,7 @@ def veri_sakla(oyun_adi, metin):
     r = requests.get(url, headers=headers)
     sha = r.json().get('sha') if r.status_code == 200 else None
     content_encoded = base64.b64encode(metin.encode('utf-8')).decode('utf-8')
-    data = {"message": f"V12 Ultra Kayit: {oyun_adi}", "content": content_encoded}
+    data = {"message": f"V14 Quantum Kayit: {oyun_adi}", "content": content_encoded}
     if sha: data["sha"] = sha
     res = requests.put(url, json=data, headers=headers)
     return res.status_code in [200, 201]
@@ -24,73 +23,78 @@ def veri_getir(oyun_adi):
     url = f"https://api.github.com/repos/{REPO}/contents/{oyun_adi}.txt"
     headers = {"Authorization": f"token {TOKEN}"}
     r = requests.get(url, headers=headers)
-    if r.status_code == 200:
-        return base64.b64decode(r.json()['content']).decode('utf-8')
-    return ""
+    return base64.b64decode(r.json()['content']).decode('utf-8') if r.status_code == 200 else ""
 
-st.set_page_config(page_title="Loto AI V12 Ultra Master", layout="wide")
-st.title("🏆 Loto AI Ultra Master V12")
+st.set_page_config(page_title="Loto AI V14 Quantum Master", layout="wide")
+st.title("🌌 Loto AI V14 Quantum Master")
 
-# Oyun Limitleri
-oyun_ayar = {
-    "Süper Loto": {"dosya": "SuperLoto", "max": 60},
-    "Çılgın Sayısal": {"dosya": "CilginSayisal", "max": 90}
+oyunlar = {
+    "Süper Loto": {"dosya": "SuperLoto", "max": 60, "adet": 6},
+    "Çılgın Sayısal": {"dosya": "CilginSayisal", "max": 90, "adet": 6},
+    "On Numara": {"dosya": "OnNumara", "max": 80, "adet": 10}, # Seçilen 10 sayı
+    "Şans Topu": {"dosya": "SansTopu", "max": 34, "adet": 5}
 }
 
-secim = st.selectbox("Analiz Edilecek Oyun", list(oyun_ayar.keys()))
-ayar = oyun_ayar[secim]
+secim = st.selectbox("Analiz Edilecek Oyun", list(oyunlar.keys()))
+ayar = oyunlar[secim]
 h_key = f"h_{ayar['dosya']}"
 
-# --- KALICILIK ÇÖZÜMÜ ---
-# Her sayfa açıldığında veya oyun değiştiğinde GitHub'dan taze veriyi çek
-st.session_state[h_key] = veri_getir(ayar['dosya'])
+if h_key not in st.session_state:
+    st.session_state[h_key] = veri_getir(ayar['dosya'])
 
 col1, col2 = st.columns([1, 2])
 
 with col1:
     st.header("📊 Veri Havuzu")
-    mevcut_veri = st.session_state[h_key]
-    sayi_havuzu = re.findall(r'\d+', mevcut_veri)
-    st.metric("Buluttaki Kayıtlı Sayı", len(sayi_havuzu))
+    mevcut = st.session_state[h_key]
+    sayilar = re.findall(r'\d+', mevcut)
+    st.metric(f"{secim} Hafızası", f"{len(sayilar)} Sayı")
     
-    with st.form("veri_yukle", clear_on_submit=True):
-        girdi = st.text_area("Yeni Çekilişleri Buraya Ekle", height=150)
+    with st.form("form_v14", clear_on_submit=True):
+        girdi = st.text_area("Yeni Verileri Buraya Ekle", height=150)
         if st.form_submit_button("💎 BULUTA MÜHÜRLE"):
-            yeni_metin = mevcut_veri + "\n" + girdi
-            if veri_sakla(ayar['dosya'], yeni_metin):
-                st.session_state[h_key] = yeni_metin
-                st.success("Veri GitHub'a mühürlendi! Artık sıfırlanmaz.")
+            yeni = mevcut + "\n" + girdi
+            if veri_sakla(ayar['dosya'], yeni):
+                st.session_state[h_key] = yeni
+                st.success("Mühürlendi!")
                 st.rerun()
 
 with col2:
-    st.header("🧬 Ultra Analiz (2 Milyon)")
-    if st.button("🚀 ANALİZİ BAŞLAT", use_container_width=True):
-        if len(sayi_havuzu) < 10: st.warning("Hafıza boş kanka!")
+    st.header("🧬 Akıllı Filtreleme Algoritması")
+    if st.button("🚀 QUANTUM ANALİZİ BAŞLAT", use_container_width=True):
+        if len(sayilar) < 10:
+            st.warning("Analiz için daha fazla veriye ihtiyaç var!")
         else:
-            with st.status("🛸 2 Milyon Olasılık Taranıyor ve Filtreleniyor..."):
-                frekans = Counter(sayi_havuzu)
+            with st.status("🛸 Analiz ve Filtreleme Başladı..."):
+                frekans = Counter(sayilar)
                 adaylar = []
-                for _ in range(2000000):
-                    kolon = tuple(sorted(random.sample(range(1, ayar['max'] + 1), 6)))
+                
+                for _ in range(2000000): # 2 Milyon deneme
+                    kolon = sorted(random.sample(range(1, ayar['max'] + 1), ayar['adet']))
                     
-                    # --- V12 ARDIŞIK VE BENZERLİK FİLTRELERİ ---
-                    # 1. Filtre: Yan yana 2'den fazla ardışık sayı gelmesin (Örn: 10-11-12 YASAK)
-                    ardisik_hata = any(kolon[i+1] - kolon[i] == 1 and kolon[i+2] - kolon[i+1] == 1 for i in range(4))
+                    # 1. Filtre: Mesafe Kontrolü (Sayılar çok bitişik mi?)
+                    ardisik_sayisi = sum(1 for i in range(len(kolon)-1) if kolon[i+1] - kolon[i] == 1)
+                    if ardisik_sayisi > 1: continue # En fazla 1 tane ardışık çift olabilir
                     
-                    # 2. Filtre: Kolon içinde çok fazla ardışık çift olmasın
-                    cift_ardisik = sum(1 for i in range(5) if kolon[i+1] - kolon[i] == 1)
+                    # 2. Filtre: Tek/Çift Dengesi (Hepsi tek veya hepsi çift olamaz)
+                    tekler = sum(1 for n in kolon if n % 2 != 0)
+                    if tekler == 0 or tekler == ayar['adet']: continue
                     
-                    if not ardisik_hata and cift_ardisik <= 1:
-                        puan = sum(frekans.get(str(n), 0) for n in kolon)
-                        adaylar.append((kolon, puan))
+                    # 3. Filtre: Grup Yayılımı (Sayılar tüm tabloya yayılıyor mu?)
+                    mesafe = kolon[-1] - kolon[0]
+                    if mesafe < (ayar['max'] / 3): continue # Çok dar bir alana sıkışmışsa ele
+                    
+                    puan = sum(frekans.get(str(n), 0) for n in kolon)
+                    adaylar.append((tuple(kolon), puan))
                 
                 adaylar.sort(key=lambda x: x[1], reverse=True)
-                final_list = []
+                
+                # 4. Sert Benzersizlik Filtresi
+                final = []
                 for k, p in adaylar:
-                    if len(final_list) >= 10: break
-                    # 3. Filtre: Tahmin edilen kolonlar birbirine benzemesin (Max 2 sayı çakışabilir)
-                    if not any(len(set(k) & set(f[0])) > 2 for f in final_list):
-                        final_list.append((k, p))
+                    if len(final) >= 10: break
+                    if not any(len(set(k) & set(f[0])) > 2 for f in final): # Max 2 ortak sayı
+                        final.append((k, p))
             
-            for i, (k, p) in enumerate(final_list, 1):
-                st.info(f"**Tahmin {i}:** {' - '.join([f'{x:02d}' for x in k])} (Güç: %{min(100, p//10)})")
+            for i, (k, p) in enumerate(final, 1):
+                st.info(f"**Kolon {i}:** {' - '.join([f'{x:02d}' for x in k])}")
