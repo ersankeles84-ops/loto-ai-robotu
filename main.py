@@ -4,70 +4,86 @@ import numpy as np
 import re
 
 st.set_page_config(page_title="Loto AI Master Pro", layout="wide")
-st.title("🎰 Loto AI Master - 6+1 Profesyonel Sistem")
+st.title("🎰 Loto AI Master - Akıllı ve Kalıcı Analiz")
 
-# 4 Oyun Sekmesi
-tabs = st.tabs(["🔵 Sayısal Loto", "🔴 Süper Loto", "🟢 On Numara", "🟡 Şans Topu"])
+# Oyun Ayarları
+oyunlar = {
+    "Sayısal Loto": {"adet": 6, "tavan": 90},
+    "Süper Loto": {"adet": 6, "tavan": 60},
+    "On Numara": {"adet": 10, "tavan": 80},
+    "Şans Topu": {"adet": 5, "tavan": 34}
+}
+
+# Hafıza ve Resetleme Başlatma
+for oyun in oyunlar:
+    if f"depo_{oyun}" not in st.session_state: st.session_state[f"depo_{oyun}"] = ""
+    if f"reset_{oyun}" not in st.session_state: st.session_state[f"reset_{oyun}"] = 0
+
+tabs = st.tabs([f"🔵 {o}" if i==0 else f"🔴 {o}" if i==1 else f"🟢 {o}" if i==2 else f"🟡 {o}" for i, o in enumerate(oyunlar)])
 
 def veri_ayikla(metin, tavan):
-    sayilar = []
-    if not metin: return sayilar
-    satirlar = metin.split('\n')
-    for satir in satirlar:
-        bulunanlar = re.findall(r'\b(?:[1-9]|[1-8][0-9]|90)\b', satir)
-        if 6 <= len(bulunanlar) <= 15:
-            sayilar.extend([int(s) for s in bulunanlar[:6]])
-    return sayilar
+    if not metin: return []
+    # Sadece 1-tavan arası loto sayılarını bulur
+    bulunanlar = re.findall(r'\b(?:[1-9]|[1-8][0-9]|90)\b', metin)
+    return [int(s) for s in bulunanlar if int(s) <= tavan]
 
 def oyun_paneli(oyun, adet, tavan, sekme):
     with sekme:
-        # Hafıza Alanı
-        if f"depo_{oyun}" not in st.session_state:
-            st.session_state[f"depo_{oyun}"] = ""
+        st.subheader(f"📊 {oyun} Merkezi")
         
-        # Kutuyu sıfırlamak için sayaç (Resetleme Anahtarı)
-        if f"reset_{oyun}" not in st.session_state:
-            st.session_state[f"reset_{oyun}"] = 0
+        # 1. BÖLÜM: VERİ YÜKLEME VE YEDEKLEME
+        col_y1, col_y2 = st.columns(2)
+        with col_y1:
+            yuklenen = st.file_uploader(f"Hafıza Yedek Dosyasını Yükle (.txt)", type=["txt"], key=f"up_{oyun}")
+            if yuklenen:
+                st.session_state[f"depo_{oyun}"] = yuklenen.read().decode("utf-8")
+                st.success("✅ Yedek başarıyla yüklendi!")
 
-        col1, col2 = st.columns(2)
-        with col1:
-            st.subheader("📥 Yeni Veri Ekle")
-            # Her kayıtta anahtar (key) değiştiği için kutu zorla boşalacak
-            giriş = st.text_area(f"Verileri Buraya Yapıştır", height=150, 
-                                 key=f"input_{oyun}_{st.session_state[f'reset_{oyun}']}")
+        with col_y2:
+            if st.session_state[f"depo_{oyun}"]:
+                st.download_button(f"📥 {oyun} Hafızasını Telefona Yedekle", 
+                                   st.session_state[f"depo_{oyun}"], 
+                                   file_name=f"{oyun}_yedek.txt", key=f"dl_{oyun}")
+
+        st.divider()
+
+        # 2. BÖLÜM: YENİ VERİ GİRİŞİ (MANUEL/OTOMATİK)
+        c1, c2 = st.columns(2)
+        with c1:
+            anahtar = f"in_{oyun}_{st.session_state[f'reset_{oyun}']}"
+            giriş = st.text_area("Yeni Çekiliş Sonuçlarını Ekle", height=100, key=anahtar)
             
-            if st.button(f"💾 Hafızaya Kaydet ve Kutuyu Boşalt", key=f"btn_sv_{oyun}"):
+            if st.button(f"💾 Hafızaya Kat ve Temizle", key=f"sv_{oyun}"):
                 if giriş:
                     st.session_state[f"depo_{oyun}"] += "\n" + giriş
-                    # ANAHTARI DEĞİŞTİR (Bu işlem kutuyu anında siler)
                     st.session_state[f"reset_{oyun}"] += 1
-                    st.success("✅ Hafızaya alındı ve kutu resetlendi!")
+                    st.success("✅ Hafızaya eklendi!")
                     st.rerun()
 
-        with col2:
-            st.subheader("📊 Hafıza Durumu")
-            ayiklanan = veri_ayikla(st.session_state[f"depo_{oyun}"], tavan)
-            st.info(f"Hafızadaki Net Sayı Adedi: {len(ayiklanan)}")
-            if st.button(f"🗑️ {oyun} Hafızasını Komple Sil", key=f"btn_clr_{oyun}"):
+        with c2:
+            net_sayilar = veri_ayikla(st.session_state[f"depo_{oyun}"], tavan)
+            st.info(f"🧠 Hafıza Durumu: {len(net_sayilar)} Sayı")
+            if st.button(f"🗑️ Tüm Hafızayı SIFIRLA", key=f"clr_{oyun}"):
                 st.session_state[f"depo_{oyun}"] = ""
                 st.rerun()
 
         st.divider()
-        if st.button(f"🚀 10 Kolon Üret (6+1 Tahmin)", key=f"btn_pre_{oyun}"):
-            datalar = veri_ayikla(st.session_state[f"depo_{oyun}"], tavan)
-            if len(datalar) < adet:
-                st.error("Hafıza yetersiz! Veri eklemelisiniz.")
-            else:
-                st.success("🤖 AI 6 Sayı + 1 SüperStar Tahmini:")
-                frekans = pd.Series(datalar).value_counts()
-                populer = frekans.index.tolist()
-                for i in range(1, 11):
-                    ana = sorted(np.random.choice(populer[:20]*3 + list(range(1, tavan+1)), adet, replace=False))
-                    ss = np.random.randint(1, tavan + 1)
-                    st.code(f"Kolon {i}: {' - '.join(map(str, ana))} | ⭐ SüperStar: {ss}")
 
-# Panelleri Çalıştır
-oyun_paneli("Sayısal Loto", 6, 90, tabs[0])
-oyun_paneli("Süper Loto", 6, 60, tabs[1])
-oyun_paneli("On Numara", 10, 80, tabs[2])
-oyun_paneli("Şans Topu", 5, 34, tabs[3])
+        # 3. BÖLÜM: TAHMİN ÜRETME
+        if st.button(f"🚀 10 Kolon Tahmini Üret (6+1)", key=f"pre_{oyun}"):
+            if len(net_sayilar) < adet * 2:
+                st.error("Daha fazla veri yüklemelisiniz!")
+            else:
+                st.success("🤖 AI Profesyonel Tahminleri:")
+                farkli_sayilar = pd.Series(net_sayilar).value_counts()
+                populer = farkli_sayilar.index.tolist()
+                for i in range(1, 11):
+                    # Hibrit Seçim: Çok çıkanlar %70, Şans %30
+                    havuz = populer[:15] * 4 + list(range(1, tavan + 1))
+                    ana = sorted(np.random.choice(havuz, adet, replace=False))
+                    ss = np.random.randint(1, tavan + 1)
+                    st.markdown(f"**Kolon {i}:** `{ana}` | ⭐ **SüperStar:** `{ss}`")
+
+# Robotu Çalıştır
+for i, (oyun, ayar) in enumerate(oyunlar.items()):
+    oyun_paneli(oyun, ayar["adet"], ayar["tavan"], tabs[i])
