@@ -6,41 +6,46 @@ import random
 from collections import Counter
 
 # Bulut Bağlantısı - Secrets
-TOKEN = st.secrets["GITHUB_TOKEN"]
-REPO = st.secrets["REPO_NAME"]
+try:
+    TOKEN = st.secrets["GITHUB_TOKEN"]
+    REPO = st.secrets["REPO_NAME"]
+except:
+    st.error("❌ HATA: Secrets ayarların eksik kanka! GITHUB_TOKEN ve REPO_NAME ekli mi?")
 
 def veri_sakla(oyun_adi, metin):
-    try:
-        url = f"https://api.github.com/repos/{REPO}/contents/{oyun_adi}.txt"
-        headers = {"Authorization": f"token {TOKEN}", "Accept": "application/vnd.github.v3+json"}
-        r = requests.get(url, headers=headers)
-        sha = r.json()['sha'] if r.status_code == 200 else None
-        content_encoded = base64.b64encode(metin.encode('utf-8')).decode('utf-8')
-        data = {"message": f"V10 Master Update: {oyun_adi}", "content": content_encoded}
-        if sha: data["sha"] = sha
-        res = requests.put(url, json=data, headers=headers)
-        return res.status_code in [200, 201]
-    except: return False
+    url = f"https://api.github.com/repos/{REPO}/contents/{oyun_adi}.txt"
+    headers = {"Authorization": f"token {TOKEN}", "Accept": "application/vnd.github.v3+json"}
+    
+    # Mevcut dosyayı kontrol et
+    r = requests.get(url, headers=headers)
+    sha = r.json().get('sha') if r.status_code == 200 else None
+    
+    content_encoded = base64.b64encode(metin.encode('utf-8')).decode('utf-8')
+    data = {"message": f"V10 Kayit: {oyun_adi}", "content": content_encoded}
+    if sha: data["sha"] = sha
+    
+    res = requests.put(url, json=data, headers=headers)
+    if res.status_code in [200, 201]: return True
+    else:
+        st.error(f"GitHub Hatası: {res.status_code} - {res.text}")
+        return False
 
 def veri_getir(oyun_adi):
-    try:
-        url = f"https://api.github.com/repos/{REPO}/contents/{oyun_adi}.txt"
-        headers = {"Authorization": f"token {TOKEN}"}
-        r = requests.get(url, headers=headers)
-        if r.status_code == 200:
-            return base64.b64decode(r.json()['content']).decode('utf-8')
-    except: pass
+    url = f"https://api.github.com/repos/{REPO}/contents/{oyun_adi}.txt"
+    headers = {"Authorization": f"token {TOKEN}"}
+    r = requests.get(url, headers=headers)
+    if r.status_code == 200:
+        return base64.b64decode(r.json()['content']).decode('utf-8')
     return ""
 
-st.set_page_config(page_title="Loto AI V10.0 Master", layout="wide")
+st.set_page_config(page_title="Loto AI V10 Master", layout="wide")
 st.title("🏆 Loto AI Hyper Master V10.0")
-st.subheader("2 Milyon Kombinasyon | Akıllı Filtreleme | Kalıcı Hafıza")
 
 oyun_ayarlar = {
-    "Çılgın Sayısal": {"dosya": "CilginSayisal", "max": 90, "adet": 6, "ek": "Süper Star", "ek_max": 90},
-    "Süper Loto": {"dosya": "SuperLoto", "max": 60, "adet": 6, "ek": None, "ek_max": 0},
-    "On Numara": {"dosya": "OnNumara", "max": 80, "adet": 22, "ek": None, "ek_max": 0},
-    "Şans Topu": {"dosya": "SansTopu", "max": 34, "adet": 5, "ek": "Artı", "ek_max": 14}
+    "Çılgın Sayısal": {"dosya": "CilginSayisal", "max": 90, "adet": 6},
+    "Süper Loto": {"dosya": "SuperLoto", "max": 60, "adet": 6},
+    "On Numara": {"dosya": "OnNumara", "max": 80, "adet": 22},
+    "Şans Topu": {"dosya": "SansTopu", "max": 34, "adet": 5}
 }
 
 tabs = st.tabs(list(oyun_ayarlar.keys()))
@@ -51,7 +56,7 @@ for i, tab in enumerate(tabs):
     h_key = f"h_{ayar['dosya']}"
     
     with tab:
-        # Otomatik Hafıza Kontrolü
+        # OTOMATİK VERİ ÇEKME
         if h_key not in st.session_state or not st.session_state[h_key]:
             st.session_state[h_key] = veri_getir(ayar['dosya'])
 
@@ -63,51 +68,46 @@ for i, tab in enumerate(tabs):
             tum_sayilar = re.findall(r'\d+', mevcut)
             st.metric("Kayıtlı Sayı Havuzu", len(tum_sayilar))
             
-            with st.form(key=f"v10_f_{ayar['dosya']}", clear_on_submit=True):
-                girdi = st.text_area("Yeni Çekilişleri Buraya Yapıştır", height=200, help="Tarih ve sayıları birlikte girebilirsin.")
+            with st.form(key=f"v10_form_{ayar['dosya']}", clear_on_submit=True):
+                girdi = st.text_area("Verileri Yapıştır", height=200)
                 if st.form_submit_button("💎 BULUTA MÜHÜRLE"):
                     if girdi:
-                        yeni_veri = mevcut + "\n" + girdi
-                        if veri_sakla(ayar['dosya'], yeni_veri):
-                            st.session_state[h_key] = yeni_veri
-                            st.success("Hafıza V10 seviyesine güncellendi!")
+                        yeni_hafiza = mevcut + "\n" + girdi
+                        if veri_sakla(ayar['dosya'], yeni_hafiza):
+                            st.session_state[h_key] = yeni_hafiza
+                            st.success("✅ Hafıza Buluta Çakıldı!")
                             st.rerun()
-                        else: st.error("Bağlantı hatası!")
 
         with col2:
-            st.header("🧬 V10 Analiz Motoru (2M)")
-            if st.button(f"🚀 MASTER ANALİZİ BAŞLAT", key=f"v10_b_{ayar['dosya']}", use_container_width=True):
-                if len(tum_sayilar) < 20:
-                    st.warning("Analiz için daha fazla veriye açım kanka!")
+            st.header("🧬 Akıllı Analiz (2 Milyon)")
+            if st.button(f"🚀 MASTER ANALİZİ BAŞLAT", key=f"v10_btn_{ayar['dosya']}", use_container_width=True):
+                if len(tum_sayilar) < 10:
+                    st.warning("Hafıza boş kanka, veri yükle!")
                 else:
-                    with st.status("🛸 2.000.000 Kombinasyon Taranıyor...", expanded=True) as status:
+                    with st.status("🛸 2 Milyon Olasılık Taranıyor...", expanded=True):
                         frekans = Counter(tum_sayilar)
                         adaylar = []
-                        
                         # 2 MİLYONLUK DEV DÖNGÜ
                         for _ in range(2000000):
                             kolon = tuple(sorted(random.sample(range(1, ayar['max'] + 1), ayar['adet'])))
-                            # Puanlama: Geçmiş uyumu + Rastgelelik (Kaos Faktörü)
                             puan = sum(frekans.get(str(n), 0) for n in kolon)
                             adaylar.append((kolon, puan))
                         
                         adaylar.sort(key=lambda x: x[1], reverse=True)
                         
-                        # V10 AKILLI ÇEŞİTLİLİK FİLTRESİ
+                        # V10 FİLTRE: ARDIŞIKLIĞI VE BENZERLİĞİ ÖNLE
                         final_on = []
                         for kolon, puan in adaylar:
                             if len(final_on) >= 10: break
-                            # Filtre: Ardışık sayıları dengele ve diğer kolonlara benzemesin
-                            benzerlik_var = any(len(set(kolon) & set(f[0])) > 3 for f in final_on)
-                            ardisik_sayisi = sum(1 for j in range(len(kolon)-1) if kolon[j+1] - kolon[j] == 1)
+                            # Diğer seçilen kolonlarla çok benzer olmasın
+                            cok_benzer = any(len(set(kolon) & set(f[0])) > 3 for f in final_on)
+                            # 3'ten fazla ardışık sayı olmasın (01-02-03-04 gibi)
+                            ardisik = sum(1 for j in range(len(kolon)-1) if kolon[j+1] - kolon[j] == 1)
                             
-                            if not benzerlik_var and ardisik_sayisi < 3:
+                            if not cok_benzer and ardisik < 3:
                                 final_on.append((kolon, puan))
-                        
-                        status.update(label="✅ V10 Analizi Başarıyla Tamamlandı!", state="complete")
 
-                    st.subheader("🎯 Stratejik En Güçlü 10 Kolon")
                     for k, (kolon, puan) in enumerate(final_on, 1):
                         k_str = " - ".join([f"{n:02d}" for n in kolon])
-                        st.success(f"**Kolon {k}:** {k_str} (Analiz Skoru: {puan})")
+                        st.success(f"**Kolon {k}:** {k_str} (Skor: {puan})")
                     st.balloons()
