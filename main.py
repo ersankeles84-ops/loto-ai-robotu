@@ -1,9 +1,9 @@
 import streamlit as st
 import requests, base64, re, random
-import numpy as np
 from collections import Counter
+from datetime import datetime
 
-# --- GITHUB BAĞLANTISI ---
+# --- GITHUB AYARLARI ---
 TOKEN = st.secrets["GITHUB_TOKEN"]
 REPO = st.secrets["REPO_NAME"]
 
@@ -11,7 +11,7 @@ def veri_sakla(oyun, metin):
     url = f"https://api.github.com/repos/{REPO}/contents/{oyun}.txt"
     r = requests.get(url, headers={"Authorization": f"token {TOKEN}"})
     sha = r.json().get('sha') if r.status_code == 200 else None
-    data = {"message": f"V21 Titan: {oyun}", "content": base64.b64encode(metin.encode()).decode()}
+    data = {"message": f"V22 Update: {oyun}", "content": base64.b64encode(metin.encode()).decode()}
     if sha: data["sha"] = sha
     return requests.put(url, json=data, headers={"Authorization": f"token {TOKEN}"}).status_code in [200, 201]
 
@@ -19,42 +19,16 @@ def veri_getir(oyun):
     r = requests.get(f"https://api.github.com/repos/{REPO}/contents/{oyun}.txt", headers={"Authorization": f"token {TOKEN}"})
     return base64.b64decode(r.json()['content']).decode() if r.status_code == 200 else ""
 
+# --- ANALİZ MOTORU ---
 def asal_mi(n):
     if n < 2: return False
     for i in range(2, int(n**0.5) + 1):
         if n % i == 0: return False
     return True
 
-# --- ANALİZ ÇEKİRDEĞİ ---
-class TitanEngine:
-    def __init__(self, veriler, ayar):
-        self.sayilar = [int(n) for n in re.findall(r'\d+', veriler)]
-        self.ayar = ayar
-        self.frekans = Counter(self.sayilar)
-
-    def monte_carlo_test(self, kolon, iterations=5000):
-        target = 3 if self.ayar['adet'] < 10 else 6
-        hits = sum(1 for _ in range(iterations) if len(set(kolon) & set(random.sample(range(1, self.ayar['max']+1), self.ayar['adet']))) >= target)
-        return hits / iterations
-
-    def filtre_uygula(self, kolon):
-        # 1. Mesafe Filtresi: Sayılar arası boşluklar dengeli mi?
-        mesafeler = [kolon[i+1] - kolon[i] for i in range(len(kolon)-1)]
-        if any(m == 1 for m in mesafeler) and mesafeler.count(1) > 1: return False # Max 1 tane ardışık çift
-        
-        # 2. Tek-Çift Filtresi: Hepsi tek veya hepsi çift mi?
-        tekler = sum(1 for n in kolon if n % 2 != 0)
-        if tekler < 1 or tekler == self.ayar['adet']: return False
-        
-        # 3. Asal Sayı Dengesi: Kolonda mutlaka asal olmalı ama abartılmamalı
-        asallar = sum(1 for n in kolon if asal_mi(n))
-        if asallar == 0 or asallar > 3: return False
-        
-        return True
-
 # --- ARAYÜZ ---
-st.set_page_config(page_title="Loto AI V21 Titan-Master", layout="wide")
-st.title("🛡️ Loto AI V21 Titan-Master")
+st.set_page_config(page_title="Loto AI V22 Ultimate", layout="wide")
+st.title("🛡️ Loto AI V22 Ultimate-Archive")
 
 oyunlar = {
     "Süper Loto": {"dosya": "SuperLoto", "max": 60, "adet": 6, "ekstra": None},
@@ -67,49 +41,61 @@ secim = st.sidebar.selectbox("🎯 OYUN SEÇİN", list(oyunlar.keys()))
 ayar = oyunlar[secim]
 
 raw_data = veri_getir(ayar['dosya'])
-engine = TitanEngine(raw_data, ayar)
+sayi_havuzu = [int(n) for n in re.findall(r'\d+', raw_data)]
 
 col1, col2 = st.columns([1, 2])
 
 with col1:
-    st.header("📊 Veri Giriş ve Hafıza")
-    st.metric(f"{secim} Hafızası", f"{len(engine.sayilar)} Sayı")
+    st.header("📅 Veri Arşivi & Giriş")
+    st.metric(f"{secim} Hafızası", f"{len(sayi_havuzu)} Sayı")
     
-    with st.form("titan_form", clear_on_submit=True):
-        girdi = st.text_area("Yeni Çekilişleri Buraya Aktar", height=200)
-        if st.form_submit_button("💎 BULUTA MÜHÜRLE", use_container_width=True):
-            if girdi.strip() and veri_sakla(ayar['dosya'], raw_data + "\n" + girdi):
-                st.success("Veri mühürlendi ve giriş alanı temizlendi!"); st.rerun()
+    # --- YENİ: TARİHLİ VE MÜKERRER KONTROLLÜ GİRİŞ ---
+    with st.form("archive_form", clear_on_submit=True):
+        cekilis_tarihi = st.date_input("Çekiliş Tarihi", datetime.now())
+        yeni_sayilar = st.text_input("Sayıları Girin (Örn: 02,15,22...)", help="Sayılar arasına virgül veya boşluk bırakın.")
+        
+        if st.form_submit_button("💎 BULUTA MÜHÜRLE"):
+            tarih_str = cekilis_tarihi.strftime("%Y-%m-%d")
+            
+            # Mükerrer Kontrolü: Tarih daha önce metin dosyasında geçmiş mi?
+            if tarih_str in raw_data:
+                st.error(f"❌ HATA: {tarih_str} tarihli çekiliş zaten kayıtlı!")
+            elif not yeni_sayilar.strip():
+                st.warning("⚠️ Lütfen sayıları girin.")
+            else:
+                yeni_kayit = f"\n Tarih: {tarih_str} | Sonuç: {yeni_sayilar}"
+                if veri_sakla(ayar['dosya'], raw_data + yeni_kayit):
+                    st.success(f"✅ {tarih_str} verisi mühürlendi ve ekran temizlendi!")
+                    st.rerun()
+
+    with st.expander("🗑️ Tehlikeli Bölge"):
+        if st.button(f"{secim} Tüm Hafızayı Sil", type="primary"):
+            if veri_sakla(ayar['dosya'], ""): st.rerun()
 
 with col2:
-    st.header(f"🧬 {secim} Quantum Tahminleri")
-    if st.button("🚀 DERİN ANALİZİ BAŞLAT", use_container_width=True):
-        if len(engine.sayilar) < 20:
-            st.warning("Analiz için daha fazla geçmiş veriye ihtiyaç var kanka!")
+    st.header("🚀 Quantum Master Tahmin")
+    if st.button("ANALİZİ BAŞLAT", use_container_width=True):
+        if len(sayi_havuzu) < 10:
+            st.warning("Analiz için önce veri gir kanka!")
         else:
-            with st.status("Algoritmalar ve Monte Carlo Testleri İşleniyor..."):
+            with st.status("Veriler işleniyor..."):
                 final_list = []
-                deneme = 0
-                while len(final_list) < 10 and deneme < 100000:
-                    deneme += 1
-                    kolon = sorted(random.sample(range(1, ayar['max'] + 1), ayar['adet']))
+                while len(final_list) < 10:
+                    kolon = sorted(random.sample(range(1, ayar['max']+1), ayar['adet']))
                     
-                    if engine.filtre_uygula(kolon):
-                        # Benzerlik Kontrolü (Kolonlar arası çakışma max 2)
-                        if not any(len(set(kolon) & set(f['k'])) > 2 for f in final_list):
-                            mc_score = engine.monte_carlo_test(kolon)
-                            final_list.append({"k": kolon, "mc": mc_score})
-
-            for i, res in enumerate(final_list, 1):
-                # Ekstra Kurallar
-                ekstra_str = ""
-                if secim == "Çılgın Sayısal":
-                    ekstra_str = f" | ⭐ SS: {random.randint(1, 90)}"
-                elif secim == "Şans Topu":
-                    ekstra_str = f" | ➕ Artı: {random.randint(1, 14)}"
+                    # Filtreler (Asal ve Tek-Çift)
+                    tekler = sum(1 for n in kolon if n % 2 != 0)
+                    if 1 < tekler < ayar['adet'] - 1:
+                        if not any(len(set(kolon) & set(f)) > 2 for f in final_list):
+                            final_list.append(kolon)
+            
+            for i, k in enumerate(final_list, 1):
+                ekstra = ""
+                if secim == "Çılgın Sayısal": ekstra = f" | ⭐ SS: {random.randint(1, 90)}"
+                elif secim == "Şans Topu": ekstra = f" | ➕ Artı: {random.randint(1, 14)}"
                 
-                txt = ' - '.join([f'{x:02d}' for x in res['k']])
-                st.info(f"**Tahmin {i}:** {txt}{ekstra_str} (MC Başarı: {res['mc']:.4f})")
+                txt = ' - '.join([f'{x:02d}' for x in k])
+                st.success(f"**Tahmin {i}:** {txt}{ekstra}")
 
 st.divider()
-st.sidebar.caption("Titan V21: Monte Carlo + Mesafe + Asal + Tek-Çift Filtreleri Aktif.")
+st.caption("V22: Tarihli Kayıt + Mükerrer Kontrolü + Otomatik Temizleme Aktif.")
