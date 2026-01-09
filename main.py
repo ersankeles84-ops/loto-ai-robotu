@@ -24,60 +24,55 @@ def veri_sakla(oyun_adi, metin):
     headers = {"Authorization": f"token {TOKEN}"}
     r = requests.get(url, headers=headers)
     sha = r.json().get('sha') if r.status_code == 200 else None
-    data = {"message": "V33 Sovereign Intelligence", "content": base64.b64encode(metin.encode()).decode()}
+    data = {"message": "V34 Prime Update", "content": base64.b64encode(metin.encode()).decode()}
     if sha: data["sha"] = sha
     return requests.put(url, json=data, headers=headers).status_code in [200, 201]
 
-# --- BİLİMSEL ANALİZ MOTORU ---
-class SovereignIntelligence:
+# --- PRIME ANALİZ MOTORU ---
+class PrimeEngine:
     def __init__(self, raw_data, ayar):
         self.ayar = ayar
-        # 1. VERİ TEMİZLEME VE YÜKLEME
         matches = re.findall(r"Sonuç: ([\d\s,]+)", raw_data)
         self.cekilisler = [list(map(int, re.findall(r'\d+', m))) for m in matches]
         
-        # Eğer tarihli veri yoksa düz sayıları grupla
-        if not self.cekilisler:
-            nums = [int(n) for n in re.findall(r'\d+', raw_data) if 0 < int(n) <= ayar['max']]
-            self.cekilisler = [nums[i:i+ayar['adet']] for i in range(0, len(nums), ayar['adet'])]
-
-        # 2. BİRLİKTELİK MATRİSİ (Coupling Analysis)
+        # Birliktelik ve Frekans
         self.baglar = Counter()
         for c in self.cekilisler:
             for comb in combinations(sorted(c), 2):
                 self.baglar[comb] += 1
-        
-        # 3. FREKANS VE GECİKME (Lag) ANALİZİ
-        self.tum_sayilar = [s for c in self.cekilisler for s in c]
-        self.frekans = Counter(self.tum_sayilar)
+        self.frekans = Counter([s for c in self.cekilisler for s in c])
 
-    def analiz_puanla(self, kolon):
-        score = 100.0
+    def analiz_et(self, kolon):
+        puan = 100.0
         
-        # A) TOPLAM DEĞER ARALIĞI (Sum Range Theory)
-        toplam = sum(kolon)
-        min_toplam = (self.ayar['adet'] * (self.ayar['adet'] + 1)) / 2
-        max_toplam = self.ayar['adet'] * self.ayar['max'] - min_toplam
-        beklenen_ort = (min_toplam + max_toplam) / 2
-        if not (beklenen_ort * 0.7 <= toplam <= beklenen_ort * 1.3): score -= 40
+        # 1. GRUP DAĞILIM FİLTRESİ (Küçük sayı yığılmasını engeller)
+        # Sayıları 3 bölgeye ayırıyoruz
+        alt_sinir = self.ayar['max'] // 3
+        ust_sinir = (self.ayar['max'] // 3) * 2
+        grup1 = sum(1 for n in kolon if n <= alt_sinir)
+        grup2 = sum(1 for n in kolon if alt_sinir < n <= ust_sinir)
+        grup3 = sum(1 for n in kolon if n > ust_sinir)
+        
+        # Eğer bir grupta 4'ten fazla sayı varsa puanı kır (Yığılma Engeli)
+        if grup1 > 3 or grup2 > 3 or grup3 > 3: puan -= 60
+        # Her gruptan en az 1 sayı olması idealdir
+        if grup1 >= 1 and grup2 >= 1 and grup3 >= 1: puan += 30
 
-        # B) TEK-ÇİFT DENGESİ (Odd-Even Probability)
+        # 2. TEK-ÇİFT VE ARDIŞIKLIK
         tekler = sum(1 for n in kolon if n % 2 != 0)
-        if tekler in [0, self.ayar['adet']]: score -= 50 # Hepsi tek veya çift elenir
-        elif tekler in [3, self.ayar['adet']//2]: score += 20 # İdeal denge bonusu
+        if tekler in [0, self.ayar['adet']]: puan -= 50
+        if any(kolon[i+1] - kolon[i] == 1 for i in range(len(kolon)-1)): puan -= 15 # Tek ardışık okey, çift ardışık (5-6-7) yasak
+        if any(kolon[i+2] - kolon[i] == 2 for i in range(len(kolon)-2)): puan -= 70
 
-        # C) ARDIŞIKLIK VE KAOS (Consecutive/Entropy)
-        if any(kolon[i+2] - kolon[i] == 2 for i in range(len(kolon)-2)): score -= 60
-
-        # D) BİRLİKTELİK VE FREKANS (Historical Coupling)
+        # 3. GEÇMİŞ BİRLİKTELİK PUANI
         for comb in combinations(kolon, 2):
-            score += self.baglar.get(comb, 0) * 2.5
-        
-        return score
+            puan += self.baglar.get(comb, 0) * 4
+            
+        return puan
 
 # --- ARAYÜZ ---
-st.set_page_config(page_title="Loto AI Sovereign V33", layout="wide")
-st.title("🏛️ Loto AI: Sovereign Intelligence V33")
+st.set_page_config(page_title="Loto AI Prime V34", layout="wide")
+st.title("🏛️ Loto AI V34: Prime Sovereign")
 
 oyunlar = {
     "Süper Loto": {"dosya": "SuperLoto", "max": 60, "adet": 6},
@@ -86,53 +81,44 @@ oyunlar = {
     "Şans Topu": {"dosya": "SansTopu", "max": 34, "adet": 5}
 }
 
-secim = st.sidebar.selectbox("🎯 OYUN SEÇİMİ", list(oyunlar.keys()))
+secim = st.sidebar.selectbox("🎯 OYUN SEÇİN", list(oyunlar.keys()))
 ayar = oyunlar[secim]
 
-# Veri Akışı
-raw_content = veri_getir(ayar['dosya'])
-engine = SovereignIntelligence(raw_content, ayar)
+raw = veri_getir(ayar['dosya'])
+engine = PrimeEngine(raw, ayar)
 
 col1, col2 = st.columns([1, 2])
 
 with col1:
-    st.header("📂 Veri Arşivi")
-    st.info(f"Hafızadaki Kayıt: {len(engine.cekilisler)} Çekiliş")
-    
-    with st.form("data_form", clear_on_submit=True):
-        t_in = st.date_input("Çekiliş Tarihi", datetime.now())
-        s_in = st.text_input("Sonuçları Gir")
-        if st.form_submit_button("💎 BULUTA MÜHÜRLE"):
-            if t_in.strftime("%Y-%m-%d") in raw_content:
-                st.error("Bu tarih zaten kayıtlı!")
-            elif s_in.strip():
-                yeni = raw_content + f"\nTarih: {t_in.strftime('%Y-%m-%d')} | Sonuç: {s_in}"
-                if veri_sakla(ayar['dosya'], yeni): st.success("Mühürlendi!"); st.rerun()
+    st.header("📊 Arşiv")
+    st.info(f"Kayıtlı Çekiliş: {len(engine.cekilisler)}")
+    with st.form("data_in", clear_on_submit=True):
+        t = st.date_input("Tarih", datetime.now())
+        s = st.text_input("Sonuçlar")
+        if st.form_submit_button("💎 MÜHÜRLE"):
+            if s.strip():
+                if veri_sakla(ayar['dosya'], raw + f"\nTarih: {t.strftime('%Y-%m-%d')} | Sonuç: {s}"):
+                    st.success("Mühürlendi!"); st.rerun()
 
 with col2:
-    st.header("🧠 Sovereign Karar Mekanizması")
-    if st.button("🚀 ANALİZİ BAŞLAT", use_container_width=True):
-        with st.status("Monte Carlo Simülasyonu ve Olasılık Filtreleri Çalışıyor..."):
-            adaylar = []
-            for _ in range(150000):
-                k = sorted(random.sample(range(1, ayar['max'] + 1), ayar['adet']))
-                p = engine.analiz_puanla(k)
-                if p > 0: adaylar.append((k, p))
-            
-            adaylar.sort(key=lambda x: x[1], reverse=True)
-            
-            final_10 = []
-            for k, p in adaylar:
-                if len(final_10) >= 10: break
-                # SIKI BENZERLİK SAVAR (Max 1 ortak sayı)
-                if not any(len(set(k) & set(f[0])) > 1 for f in final_10):
-                    final_10.append((k, p))
+    st.header("🧠 Prime Analiz")
+    if st.button("🚀 MASTER ANALİZİ BAŞLAT", use_container_width=True):
+        adaylar = []
+        for _ in range(200000): # 200 bin deneme
+            k = sorted(random.sample(range(1, ayar['max'] + 1), ayar['adet']))
+            p = engine.analiz_et(k)
+            if p > 0: adaylar.append((k, p))
+        
+        adaylar.sort(key=lambda x: x[1], reverse=True)
+        final = []
+        for k, p in adaylar:
+            if len(final) >= 10: break
+            # Benzerlik Savar (Max 1 ortak)
+            if not any(len(set(k) & set(f[0])) > 1 for f in final):
+                final.append((k, p))
 
-        for i, (k, p) in enumerate(final_10, 1):
+        for i, (k, p) in enumerate(final, 1):
             ekstra = ""
             if secim == "Çılgın Sayısal": ekstra = f" | ⭐ SS: {random.randint(1, 90)}"
             elif secim == "Şans Topu": ekstra = f" | ➕ Artı: {random.randint(1, 14)}"
             st.success(f"**Tahmin {i}:** {' - '.join([f'{x:02d}' for x in k])}{ekstra} (Skor: {p:.1f})")
-
-st.divider()
-st.caption("V33: Monte Carlo, Birliktelik Matrisi ve Toplam Değer Aralığı filtreleri aktiftir.")
