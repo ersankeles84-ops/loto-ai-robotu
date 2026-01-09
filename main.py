@@ -3,7 +3,7 @@ import requests, base64, re, random
 from collections import Counter
 from datetime import datetime
 
-# --- GITHUB ÇELİK KASA BAĞLANTISI ---
+# --- GÜVENLİK VE BULUT BAĞLANTISI ---
 TOKEN = st.secrets["GITHUB_TOKEN"]
 REPO = st.secrets["REPO_NAME"]
 
@@ -11,114 +11,89 @@ def veri_sakla(oyun, metin):
     url = f"https://api.github.com/repos/{REPO}/contents/{oyun}.txt"
     r = requests.get(url, headers={"Authorization": f"token {TOKEN}"})
     sha = r.json().get('sha') if r.status_code == 200 else None
-    data = {"message": f"V25 Iron-Gate: {oyun}", "content": base64.b64encode(metin.encode()).decode()}
+    data = {"message": f"V26 Supreme Update", "content": base64.b64encode(metin.encode()).decode()}
     if sha: data["sha"] = sha
     return requests.put(url, json=data, headers={"Authorization": f"token {TOKEN}"}).status_code in [200, 201]
 
 def veri_getir(oyun):
     r = requests.get(f"https://api.github.com/repos/{REPO}/contents/{oyun}.txt", headers={"Authorization": f"token {TOKEN}"})
-    if r.status_code == 200:
-        return base64.b64decode(r.json()['content']).decode('utf-8')
-    return ""
+    return base64.b64decode(r.json()['content']).decode('utf-8') if r.status_code == 200 else ""
 
-# --- ANA MOTOR VE BEYİN ---
-class IronEngine:
+# --- SUPREME ANALİZ MOTORU ---
+class SupremeBrain:
     def __init__(self, raw_data, ayar):
         self.ayar = ayar
-        # TÜM VERİYİ AYIKLA (Hem tarihli hem düz sayılar)
-        self.sayilar = [int(n) for n in re.findall(r'\d+', raw_data)]
+        self.raw = raw_data
+        # EVRENSEL AYIKLAYICI: Dosyadaki her rakamı çeker
+        self.sayilar = [int(n) for n in re.findall(r'\d+', raw_data) if 0 < int(n) <= ayar['max']]
         self.frekans = Counter(self.sayilar)
-        # Tarihli kayıtları say
-        self.kayit_sayisi = len(re.findall(r"Tarih:", raw_data))
 
-    def asal_mi(self, n):
-        if n < 2: return False
-        for i in range(2, int(n**0.5) + 1):
-            if n % i == 0: return False
-        return True
-
-    def analiz_puanla(self, kolon):
-        puan = 50 # Baz puan
-        # 1. Mesafe/Ardışık Filtresi
-        if any(kolon[i+1] - kolon[i] == 1 for i in range(len(kolon)-1)): puan -= 20
+    def puanla(self, kolon):
+        puan = 50.0
+        # 1. Mesafe ve Ardışıklık
+        if any(kolon[i+1] - kolon[i] == 1 for i in range(len(kolon)-1)): puan -= 15
         # 2. Tek-Çift Dengesi
         tekler = sum(1 for n in kolon if n % 2 != 0)
         if 2 <= tekler <= (self.ayar['adet'] - 2): puan += 20
-        # 3. Asal Sayı Dengesi
-        asallar = sum(1 for n in kolon if self.asal_mi(n))
-        if 1 <= asallar <= 3: puan += 15
-        # 4. Frekans (Sıcaklık) Etkisi
-        f_skor = sum(self.frekans.get(n, 0) for n in kolon)
-        puan += (f_skor / 100)
-        return puan
+        # 3. Frekans Uyumu
+        puan += sum(self.frekans.get(n, 0) for n in kolon) / 10
+        return round(puan, 1)
 
 # --- ARAYÜZ ---
-st.set_page_config(page_title="Loto AI V25 Iron-Gate", layout="wide")
-st.title("🛡️ Loto AI V25 Iron-Gate")
+st.set_page_config(page_title="Loto AI V26 Supreme", layout="wide")
+st.title("🚀 Loto AI V26 Final-Supreme")
 
 oyunlar = {
-    "Süper Loto": {"dosya": "SuperLoto", "max": 60, "adet": 6},
-    "Çılgın Sayısal": {"dosya": "CilginSayisal", "max": 90, "adet": 6},
-    "On Numara": {"dosya": "OnNumara", "max": 80, "adet": 10},
-    "Şans Topu": {"dosya": "SansTopu", "max": 34, "adet": 5}
+    "Süper Loto": {"dosya": "SuperLoto", "max": 60, "adet": 6, "ekstra": None},
+    "Çılgın Sayısal": {"dosya": "CilginSayisal", "max": 90, "adet": 6, "ekstra": "Süper Star"},
+    "On Numara": {"dosya": "OnNumara", "max": 80, "adet": 10, "ekstra": None},
+    "Şans Topu": {"dosya": "SansTopu", "max": 34, "adet": 5, "ekstra": "+1"}
 }
 
 secim = st.sidebar.selectbox("🎯 OYUN SEÇİN", list(oyunlar.keys()))
 ayar = oyunlar[secim]
 
-# KRİTİK ADIM: VERİYİ ÇEK VE MOTORU KUR
-raw_data = veri_getir(ayar['dosya'])
-engine = IronEngine(raw_data, ayar)
+# Veri Akışını Başlat
+raw_content = veri_getir(ayar['dosya'])
+brain = SupremeBrain(raw_content, ayar)
 
 col1, col2 = st.columns([1, 2])
 
 with col1:
-    st.header("📥 Veri ve Arşiv")
-    st.success(f"Bulut Hafızası: {len(engine.sayilar)} Sayı Aktif!")
-    st.info(f"Tarihli Kayıt Sayısı: {engine.kayit_sayisi}")
+    st.header("📊 Veri Merkezi")
+    st.success(f"Aktif Hafıza: {len(brain.sayilar)} Sayı")
     
-    with st.form("input_form", clear_on_submit=True):
-        t_in = st.date_input("Çekiliş Tarihi", datetime.now())
-        s_in = st.text_input("Sonuçları Gir (Virgül/Boşluk)")
-        if st.form_submit_button("💎 BULUTA MÜHÜRLE"):
-            t_str = t_in.strftime("%Y-%m-%d")
-            if t_str in raw_data:
+    with st.form("supreme_input", clear_on_submit=True):
+        tarih = st.date_input("Çekiliş Tarihi", datetime.now())
+        girdi = st.text_area("Yeni Çekilişleri Ekle")
+        if st.form_submit_button("💎 BULUTA MÜHÜRLE VE TEMİZLE"):
+            if tarih.strftime("%Y-%m-%d") in raw_content:
                 st.error("Bu tarih zaten kayıtlı!")
-            elif not s_in.strip():
-                st.warning("Veri girmedin kanka!")
-            else:
-                yeni = f"\nTarih: {t_str} | Sonuç: {s_in}"
-                if veri_sakla(ayar['dosya'], raw_data + yeni):
-                    st.rerun()
+            elif girdi.strip():
+                yeni_veri = f"{raw_content}\nTarih: {tarih.strftime('%Y-%m-%d')} | Sonuç: {girdi}"
+                if veri_sakla(ayar['dosya'], yeni_veri): st.rerun()
 
 with col2:
-    st.header("🧠 Merkezi Beyin Analizi")
-    if st.button("🚀 TAHMİN HAVUZUNU OLUŞTUR", use_container_width=True):
-        if len(engine.sayilar) < 10:
-            st.warning("Hafıza boş görünüyor, lütfen veri ekle!")
-        else:
-            with st.status("Algoritmalar Çarpıştırılıyor..."):
-                adaylar = []
-                for _ in range(150000): # 150 bin deneme
-                    kolon = sorted(random.sample(range(1, ayar['max']+1), ayar['adet']))
-                    skor = engine.analiz_puanla(kolon)
-                    adaylar.append((kolon, skor))
-                
-                adaylar.sort(key=lambda x: x[1], reverse=True)
-                final = []
-                for k, s in adaylar:
-                    if len(final) >= 10: break
-                    if not any(len(set(k) & set(f[0])) > 2 for f in final):
-                        final.append((k, s))
+    st.header("🧬 Supreme Tahmin Çıktısı")
+    if st.button("🚀 MASTER ANALİZİ BAŞLAT", use_container_width=True):
+        with st.status("Milyonlarca Olasılık Eleniyor..."):
+            havuz = []
+            for _ in range(100000):
+                kolon = sorted(random.sample(range(1, ayar['max']+1), ayar['adet']))
+                skor = brain.puanla(kolon)
+                havuz.append((kolon, skor))
+            
+            havuz.sort(key=lambda x: x[1], reverse=True)
+            final_10 = []
+            for k, s in havuz:
+                if len(final_10) >= 10: break
+                if not any(len(set(k) & set(f[0])) > 2 for f in final_10): # Benzerlik filtresi
+                    final_10.append((k, s))
 
-            for i, (k, s) in enumerate(final, 1):
-                # Ekstra sayı kuralları
-                ekstra = ""
-                if secim == "Çılgın Sayısal": ekstra = f" | ⭐ SS: {random.randint(1, 90)}"
-                elif secim == "Şans Topu": ekstra = f" | ➕ Artı: {random.randint(1, 14)}"
-                
-                txt = ' - '.join([f'{x:02d}' for x in k])
-                st.success(f"**Tahmin {i}:** {txt}{ekstra} (Güç: {s:.1f})")
-
-st.divider()
-st.caption("Iron-Gate V25: Veri okuma garantisi + Otomatik temizleme + Merkezi beyin puanlaması.")
+        for i, (k, s) in enumerate(final_10, 1):
+            ekstra_str = ""
+            if secim == "Çılgın Sayısal": ekstra_str = f" | ⭐ SS: {random.randint(1, 90)}"
+            elif secim == "Şans Topu": ekstra_str = f" | ➕ Artı: {random.randint(1, 14)}"
+            
+            res_txt = ' - '.join([f'{x:02d}' for x in k])
+            st.info(f"**Tahmin {i}:** {res_txt}{ekstra_str} (Güç: %{s})")
